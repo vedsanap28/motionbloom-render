@@ -4,7 +4,11 @@ const { execSync } = require('child_process');
 
 const jobId = process.argv[2];
 const promptData = JSON.parse(process.argv[3]);
-const searchQuery = promptData.query || 'nature';
+let searchQuery = promptData.query || 'nature';
+// Extra lines like "Visual style: ..." — keep only the first line/sentence as the actual search term
+searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
+// Keep only first 4-5 meaningful words for a cleaner Pexels search
+searchQuery = searchQuery.split(' ').slice(0, 5).join(' ');
 const CLIP_DURATION = 5;
 
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
