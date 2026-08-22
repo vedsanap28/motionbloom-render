@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -8,35 +9,17 @@ let searchQuery = promptData.query || 'nature';
 searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
 searchQuery = searchQuery.split(' ').slice(0, 5).join(' ');
 
-const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
-const FACE_SAFE_MODIFIERS = [
-  'silhouette',
-  'faceless',
-  'from behind',
-  'back view',
-  'helmet covered face',
-  'underwater distant shot',
-  'wearing mask',
-  'obscured face',
-  'far away shot',
-  'shadow silhouette'
-];
-
-function makeFaceSafe(query) {
-  const lower = query.toLowerCase();
-  const hasPerson = PERSON_KEYWORDS.some(word => lower.includes(word));
-  if (hasPerson) {
-    const modifier = FACE_SAFE_MODIFIERS[Math.floor(Math.random() * FACE_SAFE_MODIFIERS.length)];
-    console.log(`Person detected in query, adding face-safety modifier: ${modifier}`);
-    return `${query} ${modifier}`;
-  }
-  return query;
-}
-
-searchQuery = makeFaceSafe(searchQuery);
 const CLIP_DURATION = 5;
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
+
+const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
+const FACE_SAFE_MODIFIERS = [
+  'silhouette', 'faceless', 'from behind', 'back view',
+  'helmet covered face', 'underwater distant shot', 'wearing mask',
+  'obscured face', 'far away shot', 'shadow silhouette'
+];
+const isPersonPrompt = PERSON_KEYWORDS.some(word => searchQuery.toLowerCase().includes(word));
 
 const MOOD_MAP = {
   motivational: ['motivat', 'success', 'inspir', 'goal', 'achieve', 'winner'],
@@ -57,7 +40,6 @@ function detectMood(query) {
   return 'neutral';
 }
 
-// Try Pexels first
 async function fetchFromPexels(query, count) {
   const res = await fetch(
     `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count}`,
@@ -72,7 +54,6 @@ async function fetchFromPexels(query, count) {
   });
 }
 
-// Fallback: Pixabay
 async function fetchFromPixabay(query, count) {
   const res = await fetch(
     `https://pixabay.com/api/videos/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&per_page=${count}`
@@ -83,11 +64,37 @@ async function fetchFromPixabay(query, count) {
   return data.hits.map(h => h.videos.medium.url);
 }
 
+async function getClipUrls(query, isPerson) {
+  let urls = [];
+
+  if (isPerson) {
+    console.log('Person detected — trying Pixabay AI generated videos first.');
+    urls = await fetchFromPixabay(`AI generated ${query}`, 4);
+
+    if (urls.length === 0) {
+      console.log('No AI-generated match — falling back to face-safe real footage.');
+      const modifier = FACE_SAFE_MODIFIERS[Math.floor(Math.random() * FACE_SAFE_MODIFIERS.length)];
+      urls = await fetchFromPixabay(`${query} ${modifier}`, 4);
+    }
+    if (urls.length === 0) {
+      urls = await fetchFromPexels(`${query} silhouette`, 4);
+    }
+  } else {
+    console.log('Trying Pexels first...');
+    urls = await fetchFromPexels(query, 4);
+    if (urls.length === 0 && PIXABAY_KEY) {
+      console.log('Pexels had no results, trying Pixabay...');
+      urls = await fetchFromPixabay(query, 4);
+    }
+  }
+
+  return urls;
+}
+
 async function main() {
-  console.log(`Job: ${jobId}, Query: ${searchQuery}`);
+  console.log(`Job: ${jobId}, Query: ${searchQuery}, IsPerson: ${isPersonPrompt}`);
 
-    const mood = detectMood(searchQuery);
-
+  const mood = detectMood(searchQuery);
   const allFiles = fs.readdirSync('.');
   const moodFiles = allFiles.filter(f =>
     f.toLowerCase().startsWith(`music-${mood.toLowerCase()}`) && f.endsWith('.mp3')
@@ -97,21 +104,15 @@ async function main() {
     : `music-neutral.mp3`;
 
   console.log(`Available ${mood} tracks: ${moodFiles.join(', ')}`);
-  console.log(`Detected mood: ${mood}, using ${musicFile}`);
+  console.log(`Using music: ${musicFile}`);
 
   if (!fs.existsSync('output')) fs.mkdirSync('output');
   if (!fs.existsSync('temp')) fs.mkdirSync('temp');
 
-  console.log('Trying Pexels first...');
-  let clipUrls = await fetchFromPexels(searchQuery, 4);
-
-  if (clipUrls.length === 0 && PIXABAY_KEY) {
-    console.log('Pexels had no results, trying Pixabay...');
-    clipUrls = await fetchFromPixabay(searchQuery, 4);
-  }
+  const clipUrls = await getClipUrls(searchQuery, isPersonPrompt);
 
   if (clipUrls.length === 0) {
-    throw new Error('No clips found on Pexels or Pixabay for this query.');
+    throw new Error('No clips found for this query.');
   }
 
   console.log(`Found ${clipUrls.length} clips. Downloading...`);
