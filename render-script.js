@@ -1,4 +1,3 @@
-
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -14,11 +13,6 @@ const PEXELS_KEY = process.env.PEXELS_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
 
 const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
-const FACE_SAFE_MODIFIERS = [
-  'silhouette', 'faceless', 'from behind', 'back view',
-  'helmet covered face', 'underwater distant shot', 'wearing mask',
-  'obscured face', 'far away shot', 'shadow silhouette'
-];
 const isPersonPrompt = PERSON_KEYWORDS.some(word => searchQuery.toLowerCase().includes(word));
 
 const MOOD_MAP = {
@@ -38,6 +32,21 @@ function detectMood(query) {
     if (keywords.some(kw => lowerQuery.includes(kw))) return mood;
   }
   return 'neutral';
+}
+
+function pickMusicFile(mood) {
+  const allFiles = fs.readdirSync('.');
+  let moodFiles = allFiles.filter(f =>
+    f.toLowerCase().startsWith(`music-${mood.toLowerCase()}`) && f.endsWith('.mp3')
+  );
+
+  // If chosen mood has few/no options, widen the pool to ALL music files as fallback
+  if (moodFiles.length === 0) {
+    moodFiles = allFiles.filter(f => f.toLowerCase().startsWith('music-') && f.endsWith('.mp3'));
+  }
+
+  console.log(`Mood: ${mood} — ${moodFiles.length} track(s) available: ${moodFiles.join(', ')}`);
+  return moodFiles[Math.floor(Math.random() * moodFiles.length)];
 }
 
 async function fetchFromPexels(query, count) {
@@ -64,52 +73,26 @@ async function fetchFromPixabay(query, count) {
   return data.hits.map(h => h.videos.medium.url);
 }
 
-async function getClipUrls(query, isPerson) {
-  let urls = [];
-
-  if (isPerson) {
-    console.log('Person detected — trying Pixabay AI generated videos first.');
-    urls = await fetchFromPixabay(`AI generated ${query}`, 4);
-
-    if (urls.length === 0) {
-      console.log('No AI-generated match — falling back to face-safe real footage.');
-      const modifier = FACE_SAFE_MODIFIERS[Math.floor(Math.random() * FACE_SAFE_MODIFIERS.length)];
-      urls = await fetchFromPixabay(`${query} ${modifier}`, 4);
-    }
-    if (urls.length === 0) {
-      urls = await fetchFromPexels(`${query} silhouette`, 4);
-    }
-  } else {
-    console.log('Trying Pexels first...');
-    urls = await fetchFromPexels(query, 4);
-    if (urls.length === 0 && PIXABAY_KEY) {
-      console.log('Pexels had no results, trying Pixabay...');
-      urls = await fetchFromPixabay(query, 4);
-    }
-  }
-
-  return urls;
-}
-
 async function main() {
   console.log(`Job: ${jobId}, Query: ${searchQuery}, IsPerson: ${isPersonPrompt}`);
 
-  const mood = detectMood(searchQuery);
-  const allFiles = fs.readdirSync('.');
-  const moodFiles = allFiles.filter(f =>
-    f.toLowerCase().startsWith(`music-${mood.toLowerCase()}`) && f.endsWith('.mp3')
-  );
-  const musicFile = moodFiles.length > 0
-    ? moodFiles[Math.floor(Math.random() * moodFiles.length)]
-    : `music-neutral.mp3`;
+  if (isPersonPrompt) {
+    throw new Error('PERSON_NOT_ALLOWED: Video generation featuring real people is not supported to protect individual privacy and identity. Please try a different prompt (nature, objects, animals, robots, anime, etc).');
+  }
 
-  console.log(`Available ${mood} tracks: ${moodFiles.join(', ')}`);
-  console.log(`Using music: ${musicFile}`);
+  const mood = detectMood(searchQuery);
+  const musicFile = pickMusicFile(mood);
 
   if (!fs.existsSync('output')) fs.mkdirSync('output');
   if (!fs.existsSync('temp')) fs.mkdirSync('temp');
 
-  const clipUrls = await getClipUrls(searchQuery, isPersonPrompt);
+  console.log('Trying Pexels first...');
+  let clipUrls = await fetchFromPexels(searchQuery, 4);
+
+  if (clipUrls.length === 0 && PIXABAY_KEY) {
+    console.log('Pexels had no results, trying Pixabay...');
+    clipUrls = await fetchFromPixabay(searchQuery, 4);
+  }
 
   if (clipUrls.length === 0) {
     throw new Error('No clips found for this query.');
