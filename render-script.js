@@ -8,6 +8,21 @@ let searchQuery = promptData.query || 'nature';
 searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
 searchQuery = searchQuery.split(' ').slice(0, 5).join(' ');
 
+const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
+const FACE_SAFE_MODIFIERS = ['silhouette', 'faceless', 'from behind', 'helmet'];
+
+function makeFaceSafe(query) {
+  const lower = query.toLowerCase();
+  const hasPerson = PERSON_KEYWORDS.some(word => lower.includes(word));
+  if (hasPerson) {
+    const modifier = FACE_SAFE_MODIFIERS[Math.floor(Math.random() * FACE_SAFE_MODIFIERS.length)];
+    console.log(`Person detected in query, adding face-safety modifier: ${modifier}`);
+    return `${query} ${modifier}`;
+  }
+  return query;
+}
+
+searchQuery = makeFaceSafe(searchQuery);
 const CLIP_DURATION = 5;
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
