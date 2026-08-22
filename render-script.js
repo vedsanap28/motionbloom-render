@@ -5,15 +5,13 @@ const { execSync } = require('child_process');
 const jobId = process.argv[2];
 const promptData = JSON.parse(process.argv[3]);
 let searchQuery = promptData.query || 'nature';
-// Extra lines like "Visual style: ..." — keep only the first line/sentence as the actual search term
 searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
-// Keep only first 4-5 meaningful words for a cleaner Pexels search
 searchQuery = searchQuery.split(' ').slice(0, 5).join(' ');
+
 const CLIP_DURATION = 5;
-
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
+const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
 
-// Mood keywords → music file mapping
 const MOOD_MAP = {
   motivational: ['motivat', 'success', 'inspir', 'goal', 'achieve', 'winner'],
   energetic: ['energetic', 'workout', 'gym', 'sport', 'run', 'action', 'fast'],
@@ -21,18 +19,42 @@ const MOOD_MAP = {
   peace: ['peace', 'peaceful', 'serene', 'tranquil', 'quiet'],
   emotional: ['sad', 'emotional', 'love', 'memory', 'cry', 'heart'],
   creativity: ['creative', 'art', 'design', 'idea', 'innovation'],
-    Horrormix: ['horror', 'scary', 'fear', 'dark', 'ghost', 'night'],
-  neutral: [] // default fallback
+  Horrormix: ['horror', 'scary', 'fear', 'dark', 'ghost', 'night'],
+  neutral: []
 };
 
 function detectMood(query) {
   const lowerQuery = query.toLowerCase();
   for (const [mood, keywords] of Object.entries(MOOD_MAP)) {
-    if (keywords.some(kw => lowerQuery.includes(kw))) {
-      return mood;
-    }
+    if (keywords.some(kw => lowerQuery.includes(kw))) return mood;
   }
   return 'neutral';
+}
+
+// Try Pexels first
+async function fetchFromPexels(query, count) {
+  const res = await fetch(
+    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count}`,
+    { headers: { Authorization: PEXELS_KEY } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (!data.videos) return [];
+  return data.videos.map(v => {
+    const vf = v.video_files.find(f => f.quality === 'sd') || v.video_files[0];
+    return vf.link;
+  });
+}
+
+// Fallback: Pixabay
+async function fetchFromPixabay(query, count) {
+  const res = await fetch(
+    `https://pixabay.com/api/videos/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&per_page=${count}`
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (!data.hits) return [];
+  return data.hits.map(h => h.videos.medium.url);
 }
 
 async function main() {
@@ -45,23 +67,23 @@ async function main() {
   if (!fs.existsSync('output')) fs.mkdirSync('output');
   if (!fs.existsSync('temp')) fs.mkdirSync('temp');
 
-  const searchRes = await fetch(
-    `https://api.pexels.com/videos/search?query=${encodeURIComponent(searchQuery)}&per_page=4`,
-    { headers: { Authorization: PEXELS_KEY } }
-  );
-  const searchData = await searchRes.json();
+  console.log('Trying Pexels first...');
+  let clipUrls = await fetchFromPexels(searchQuery, 4);
 
-  if (!searchData.videos || searchData.videos.length === 0) {
-    throw new Error('No clips found for this query.');
+  if (clipUrls.length === 0 && PIXABAY_KEY) {
+    console.log('Pexels had no results, trying Pixabay...');
+    clipUrls = await fetchFromPixabay(searchQuery, 4);
   }
 
-  console.log(`Found ${searchData.videos.length} clips. Downloading...`);
+  if (clipUrls.length === 0) {
+    throw new Error('No clips found on Pexels or Pixabay for this query.');
+  }
+
+  console.log(`Found ${clipUrls.length} clips. Downloading...`);
 
   const trimmedFiles = [];
-  for (let i = 0; i < searchData.videos.length; i++) {
-    const videoFiles = searchData.videos[i].video_files;
-    const sdFile = videoFiles.find(f => f.quality === 'sd') || videoFiles[0];
-    const fileRes = await fetch(sdFile.link);
+  for (let i = 0; i < clipUrls.length; i++) {
+    const fileRes = await fetch(clipUrls[i]);
     const buffer = Buffer.from(await fileRes.arrayBuffer());
     const rawPath = path.join('temp', `raw${i}.mp4`);
     fs.writeFileSync(rawPath, buffer);
@@ -74,18 +96,15 @@ async function main() {
       { stdio: 'inherit' }
     );
     trimmedFiles.push(trimmedPath);
-    console.log(`Normalized + trimmed clip${i}.mp4`);
   }
 
   const listContent = trimmedFiles.map(f => `file '${path.resolve(f)}'`).join('\n');
   fs.writeFileSync('temp/list.txt', listContent);
 
   const silentVideoPath = path.join('temp', 'silent.mp4');
-  console.log('Merging clips (no audio yet)...');
   execSync(`ffmpeg -y -f concat -safe 0 -i temp/list.txt -c copy ${silentVideoPath}`, { stdio: 'inherit' });
 
   const outputPath = path.join('output', `${jobId}.mp4`);
-  console.log(`Adding music (${musicFile})...`);
   execSync(
     `ffmpeg -y -i ${silentVideoPath} -i ${musicFile} ` +
     `-c:v copy -c:a aac -shortest -map 0:v:0 -map 1:a:0 ${outputPath}`,
