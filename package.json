@@ -3,11 +3,5 @@
   "version": "1.0.0",
   "scripts": {
     "render": "node render-script.js"
-  },
-  "dependencies": {
-    "@remotion/renderer": "^4.0.0",
-    "@remotion/bundler": "^4.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
   }
 }
