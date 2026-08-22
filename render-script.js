@@ -16,7 +16,7 @@ const MOOD_MAP = {
   calm: ['calm', 'relax', 'peace', 'meditat', 'nature', 'slow'],
   emotional: ['sad', 'emotional', 'love', 'memory', 'cry', 'heart'],
   creativity: ['creative', 'art', 'design', 'idea', 'innovation'],
-  horror: ['horror', 'scary', 'fear', 'dark', 'ghost', 'night'],
+    Horrormix: ['horror', 'scary', 'fear', 'dark', 'ghost', 'night'],
   neutral: [] // default fallback
 };
 
