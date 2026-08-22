@@ -5,33 +5,21 @@ const jobId = process.argv[2];
 const promptData = JSON.parse(process.argv[3]);
 let prompt = promptData.query || promptData.prompt || 'a beautiful scene';
 
-const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
-
-function makePersonSafe(text) {
-  const lower = text.toLowerCase();
-  const hasPerson = PERSON_KEYWORDS.some(word => lower.includes(word));
-  if (hasPerson) {
-    console.log('Person detected in prompt — forcing AI-generated (non-real) face search.');
-    return `AI generated synthetic ${text}`;
-  }
-  return text;
-}
-
-prompt = makePersonSafe(prompt);
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const PEXELS_KEY = process.env.PEXELS_IMAGE_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
 
-async function tryGemini(prompt) {
+const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
+const isPersonPrompt = PERSON_KEYWORDS.some(word => prompt.toLowerCase().includes(word));
+
+async function tryGemini(p) {
   console.log('Trying Gemini image generation...');
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
+      body: JSON.stringify({ contents: [{ parts: [{ text: p }] }] })
     }
   );
   if (!res.ok) {
@@ -41,7 +29,7 @@ async function tryGemini(prompt) {
   }
   const data = await res.json();
   const parts = data.candidates?.[0]?.content?.parts || [];
-  const imagePart = parts.find(p => p.inlineData);
+  const imagePart = parts.find(pt => pt.inlineData);
   if (!imagePart) {
     console.log('Gemini returned no image data.');
     return null;
@@ -50,7 +38,7 @@ async function tryGemini(prompt) {
 }
 
 async function tryPexels(query) {
-  console.log('Falling back to Pexels...');
+  console.log('Trying Pexels...');
   const res = await fetch(
     `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1`,
     { headers: { Authorization: PEXELS_KEY } }
@@ -64,7 +52,7 @@ async function tryPexels(query) {
 }
 
 async function tryPixabay(query) {
-  console.log('Falling back to Pixabay...');
+  console.log('Trying Pixabay...');
   const res = await fetch(
     `https://pixabay.com/api/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&per_page=3`
   );
@@ -77,7 +65,7 @@ async function tryPixabay(query) {
 }
 
 async function main() {
-  console.log(`Job: ${jobId}, Prompt: ${prompt}`);
+  console.log(`Job: ${jobId}, Prompt: ${prompt}, IsPerson: ${isPersonPrompt}`);
   if (!fs.existsSync('output')) fs.mkdirSync('output');
 
   let imageBuffer = null;
@@ -90,18 +78,7 @@ async function main() {
     console.log('Gemini error:', e.message);
   }
 
-  if (!imageBuffer) {
-      const isPersonPrompt = PERSON_KEYWORDS.some(word => prompt.toLowerCase().includes(word));
-
-  try {
-    imageBuffer = await tryGemini(prompt);
-    if (imageBuffer) source = 'gemini';
-  } catch (e) {
-    console.log('Gemini error:', e.message);
-  }
-
   if (!imageBuffer && isPersonPrompt) {
-    // Skip Pexels entirely for person prompts — go straight to Pixabay's AI-generated-people category
     console.log('Person prompt — skipping Pexels, going directly to Pixabay (AI generated people).');
     try {
       imageBuffer = await tryPixabay(`AI generated people ${prompt}`);
@@ -112,14 +89,12 @@ async function main() {
   }
 
   if (!imageBuffer && !isPersonPrompt) {
-    // Non-person prompts can safely use Pexels
     try {
       imageBuffer = await tryPexels(prompt);
       if (imageBuffer) source = 'pexels';
     } catch (e) {
       console.log('Pexels error:', e.message);
     }
-
     if (!imageBuffer) {
       try {
         imageBuffer = await tryPixabay(prompt);
