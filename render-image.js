@@ -91,20 +91,42 @@ async function main() {
   }
 
   if (!imageBuffer) {
+      const isPersonPrompt = PERSON_KEYWORDS.some(word => prompt.toLowerCase().includes(word));
+
+  try {
+    imageBuffer = await tryGemini(prompt);
+    if (imageBuffer) source = 'gemini';
+  } catch (e) {
+    console.log('Gemini error:', e.message);
+  }
+
+  if (!imageBuffer && isPersonPrompt) {
+    // Skip Pexels entirely for person prompts — go straight to Pixabay's AI-generated-people category
+    console.log('Person prompt — skipping Pexels, going directly to Pixabay (AI generated people).');
+    try {
+      imageBuffer = await tryPixabay(`AI generated people ${prompt}`);
+      if (imageBuffer) source = 'pixabay-ai-people';
+    } catch (e) {
+      console.log('Pixabay error:', e.message);
+    }
+  }
+
+  if (!imageBuffer && !isPersonPrompt) {
+    // Non-person prompts can safely use Pexels
     try {
       imageBuffer = await tryPexels(prompt);
       if (imageBuffer) source = 'pexels';
     } catch (e) {
       console.log('Pexels error:', e.message);
     }
-  }
 
-  if (!imageBuffer) {
-    try {
-      imageBuffer = await tryPixabay(prompt);
-      if (imageBuffer) source = 'pixabay';
-    } catch (e) {
-      console.log('Pixabay error:', e.message);
+    if (!imageBuffer) {
+      try {
+        imageBuffer = await tryPixabay(prompt);
+        if (imageBuffer) source = 'pixabay';
+      } catch (e) {
+        console.log('Pixabay error:', e.message);
+      }
     }
   }
 
