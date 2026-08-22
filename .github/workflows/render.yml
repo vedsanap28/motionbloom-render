@@ -34,6 +34,7 @@ jobs:
           JOB_ID: ${{ github.event.inputs.job_id }}
           PROMPT_DATA: ${{ github.event.inputs.prompt_data }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: node render-script.js "$JOB_ID" "$PROMPT_DATA"
 
       - name: Upload result
