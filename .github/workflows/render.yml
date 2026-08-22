@@ -7,7 +7,7 @@ on:
         description: 'Unique job ID for this render'
         required: true
       prompt_data:
-        description: 'JSON data with clips, text, music info'
+        description: 'JSON data with search query'
         required: true
 
 jobs:
@@ -30,6 +30,7 @@ jobs:
         env:
           JOB_ID: ${{ github.event.inputs.job_id }}
           PROMPT_DATA: ${{ github.event.inputs.prompt_data }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: node render-script.js "$JOB_ID" "$PROMPT_DATA"
 
       - name: Upload result
