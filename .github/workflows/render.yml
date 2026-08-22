@@ -27,7 +27,10 @@ jobs:
         run: npm install
 
       - name: Render video
-        run: node render-script.js "${{ github.event.inputs.job_id }}" "${{ github.event.inputs.prompt_data }}"
+        env:
+          JOB_ID: ${{ github.event.inputs.job_id }}
+          PROMPT_DATA: ${{ github.event.inputs.prompt_data }}
+        run: node render-script.js "$JOB_ID" "$PROMPT_DATA"
 
       - name: Upload result
         uses: actions/upload-artifact@v4
