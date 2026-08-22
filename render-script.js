@@ -13,7 +13,8 @@ const PEXELS_KEY = process.env.PEXELS_API_KEY;
 const MOOD_MAP = {
   motivational: ['motivat', 'success', 'inspir', 'goal', 'achieve', 'winner'],
   energetic: ['energetic', 'workout', 'gym', 'sport', 'run', 'action', 'fast'],
-  calm: ['calm', 'relax', 'peace', 'meditat', 'nature', 'slow'],
+  calm: ['calm', 'relax', 'meditat', 'nature', 'slow'],
+  peace: ['peace', 'peaceful', 'serene', 'tranquil', 'quiet'],
   emotional: ['sad', 'emotional', 'love', 'memory', 'cry', 'heart'],
   creativity: ['creative', 'art', 'design', 'idea', 'innovation'],
     Horrormix: ['horror', 'scary', 'fear', 'dark', 'ghost', 'night'],
