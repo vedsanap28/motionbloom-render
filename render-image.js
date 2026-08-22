@@ -5,6 +5,19 @@ const jobId = process.argv[2];
 const promptData = JSON.parse(process.argv[3]);
 let prompt = promptData.query || promptData.prompt || 'a beautiful scene';
 
+const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
+
+function makePersonSafe(text) {
+  const lower = text.toLowerCase();
+  const hasPerson = PERSON_KEYWORDS.some(word => lower.includes(word));
+  if (hasPerson) {
+    console.log('Person detected in prompt — forcing AI-generated (non-real) face search.');
+    return `AI generated synthetic ${text}`;
+  }
+  return text;
+}
+
+prompt = makePersonSafe(prompt);
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const PEXELS_KEY = process.env.PEXELS_IMAGE_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
