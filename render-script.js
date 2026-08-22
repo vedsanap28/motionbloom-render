@@ -9,7 +9,18 @@ searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
 searchQuery = searchQuery.split(' ').slice(0, 5).join(' ');
 
 const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
-const FACE_SAFE_MODIFIERS = ['silhouette', 'faceless', 'from behind', 'helmet'];
+const FACE_SAFE_MODIFIERS = [
+  'silhouette',
+  'faceless',
+  'from behind',
+  'back view',
+  'helmet covered face',
+  'underwater distant shot',
+  'wearing mask',
+  'obscured face',
+  'far away shot',
+  'shadow silhouette'
+];
 
 function makeFaceSafe(query) {
   const lower = query.toLowerCase();
