@@ -60,8 +60,17 @@ async function fetchFromPixabay(query, count) {
 async function main() {
   console.log(`Job: ${jobId}, Query: ${searchQuery}`);
 
-  const mood = detectMood(searchQuery);
-  const musicFile = `music-${mood}.mp3`;
+    const mood = detectMood(searchQuery);
+
+  const allFiles = fs.readdirSync('.');
+  const moodFiles = allFiles.filter(f =>
+    f.toLowerCase().startsWith(`music-${mood.toLowerCase()}`) && f.endsWith('.mp3')
+  );
+  const musicFile = moodFiles.length > 0
+    ? moodFiles[Math.floor(Math.random() * moodFiles.length)]
+    : `music-neutral.mp3`;
+
+  console.log(`Available ${mood} tracks: ${moodFiles.join(', ')}`);
   console.log(`Detected mood: ${mood}, using ${musicFile}`);
 
   if (!fs.existsSync('output')) fs.mkdirSync('output');
