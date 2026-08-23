@@ -117,7 +117,7 @@ async function main() {
     const trimmedPath = path.join('temp', `clip${i}.mp4`);
     execSync(
       `ffmpeg -y -i ${rawPath} -t ${CLIP_DURATION} ` +
-      `-vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30" ` +
+       `-vf "scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=decrease,pad=${OUT_W}:${OUT_H}:(ow-iw)/2:(oh-ih)/2,fps=30" ` + 
       `-an -c:v libx264 -preset fast -pix_fmt yuv420p ${trimmedPath}`,
       { stdio: 'inherit' }
     );
