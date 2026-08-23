@@ -4,6 +4,13 @@ const { execSync } = require('child_process');
 
 const jobId = process.argv[2];
 const promptData = JSON.parse(process.argv[3]);
+const aspect = promptData.aspect || '16:9';
+const RESOLUTIONS = {
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 },
+  '1:1': { w: 720, h: 720 }
+};
+const { w: OUT_W, h: OUT_H } = RESOLUTIONS[aspect] || RESOLUTIONS['16:9'];
 let searchQuery = promptData.query || 'nature';
 searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
 searchQuery = searchQuery.split(' ').slice(0, 5).join(' ');
