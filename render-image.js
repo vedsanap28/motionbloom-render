@@ -4,7 +4,8 @@ const path = require('path');
 const jobId = process.argv[2];
 const promptData = JSON.parse(process.argv[3]);
 let prompt = promptData.query || promptData.prompt || 'a beautiful scene';
-
+prompt = prompt.split('\n')[0].split('.')[0].trim();
+prompt = prompt.split(' ').slice(0, 6).join(' ');
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const PEXELS_KEY = process.env.PEXELS_IMAGE_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
