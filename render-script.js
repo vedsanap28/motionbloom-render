@@ -11,11 +11,20 @@ const RESOLUTIONS = {
   '1:1': { w: 720, h: 720 }
 };
 const { w: OUT_W, h: OUT_H } = RESOLUTIONS[aspect] || RESOLUTIONS['16:9'];
+
+const duration = promptData.duration || '30s';
+const theme = promptData.theme || '';
+const DURATION_SECONDS = { '15s': 15, '30s': 30, '60s': 60 };
+const CLIP_DURATION = 5;
+const NUM_CLIPS = Math.ceil((DURATION_SECONDS[duration] || 30) / CLIP_DURATION);
+
 let searchQuery = promptData.query || 'nature';
 searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
 searchQuery = searchQuery.split(' ').slice(0, 5).join(' ');
+if (theme) {
+  searchQuery = `${searchQuery} ${theme}`;
+}
 
-const CLIP_DURATION = 5;
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
 
@@ -46,12 +55,9 @@ function pickMusicFile(mood) {
   let moodFiles = allFiles.filter(f =>
     f.toLowerCase().startsWith(`music-${mood.toLowerCase()}`) && f.endsWith('.mp3')
   );
-
-  // If chosen mood has few/no options, widen the pool to ALL music files as fallback
   if (moodFiles.length === 0) {
     moodFiles = allFiles.filter(f => f.toLowerCase().startsWith('music-') && f.endsWith('.mp3'));
   }
-
   console.log(`Mood: ${mood} — ${moodFiles.length} track(s) available: ${moodFiles.join(', ')}`);
   return moodFiles[Math.floor(Math.random() * moodFiles.length)];
 }
@@ -81,7 +87,7 @@ async function fetchFromPixabay(query, count) {
 }
 
 async function main() {
-  console.log(`Job: ${jobId}, Query: ${searchQuery}, IsPerson: ${isPersonPrompt}`);
+  console.log(`Job: ${jobId}, Query: ${searchQuery}, IsPerson: ${isPersonPrompt}, Duration: ${duration} (${NUM_CLIPS} clips)`);
 
   if (isPersonPrompt) {
     throw new Error('PERSON_NOT_ALLOWED: Video generation featuring real people is not supported to protect individual privacy and identity. Please try a different prompt (nature, objects, animals, robots, anime, etc).');
@@ -94,11 +100,11 @@ async function main() {
   if (!fs.existsSync('temp')) fs.mkdirSync('temp');
 
   console.log('Trying Pexels first...');
-  let clipUrls = await fetchFromPexels(searchQuery, 4);
+  let clipUrls = await fetchFromPexels(searchQuery, NUM_CLIPS);
 
   if (clipUrls.length === 0 && PIXABAY_KEY) {
     console.log('Pexels had no results, trying Pixabay...');
-    clipUrls = await fetchFromPixabay(searchQuery, 4);
+    clipUrls = await fetchFromPixabay(searchQuery, NUM_CLIPS);
   }
 
   if (clipUrls.length === 0) {
@@ -117,7 +123,7 @@ async function main() {
     const trimmedPath = path.join('temp', `clip${i}.mp4`);
     execSync(
       `ffmpeg -y -i ${rawPath} -t ${CLIP_DURATION} ` +
-       `-vf "scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=decrease,pad=${OUT_W}:${OUT_H}:(ow-iw)/2:(oh-ih)/2,fps=30" ` + 
+      `-vf "scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=decrease,pad=${OUT_W}:${OUT_H}:(ow-iw)/2:(oh-ih)/2,fps=30" ` +
       `-an -c:v libx264 -preset fast -pix_fmt yuv420p ${trimmedPath}`,
       { stdio: 'inherit' }
     );
