@@ -88,6 +88,22 @@ async function fetchFromPixabay(query, count) {
   return data.hits.map(h => h.videos.medium.url);
 }
 
+async function downloadAndTrim(url, index) {
+  const fileRes = await fetch(url);
+  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  const rawPath = path.join('temp', `raw${index}.mp4`);
+  fs.writeFileSync(rawPath, buffer);
+
+  const trimmedPath = path.join('temp', `clip${index}.mp4`);
+  execSync(
+    `ffmpeg -y -i ${rawPath} -t ${CLIP_DURATION} ` +
+    `-vf "scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=decrease,pad=${OUT_W}:${OUT_H}:(ow-iw)/2:(oh-ih)/2,fps=30" ` +
+    `-an -c:v libx264 -preset fast -pix_fmt yuv420p ${trimmedPath}`,
+    { stdio: 'inherit' }
+  );
+  return trimmedPath;
+}
+
 async function main() {
   console.log(`Job: ${jobId}, Query: ${searchQuery}, IsPerson: ${isPersonPrompt}, Duration: ${duration} (${NUM_CLIPS} clips), Aspect: ${aspect} (${orientation})`);
 
@@ -113,24 +129,11 @@ async function main() {
     throw new Error('No clips found for this query.');
   }
 
-  console.log(`Found ${clipUrls.length} clips. Downloading...`);
+  console.log(`Found ${clipUrls.length} clips. Downloading in parallel...`);
 
-  const trimmedFiles = [];
-  for (let i = 0; i < clipUrls.length; i++) {
-    const fileRes = await fetch(clipUrls[i]);
-    const buffer = Buffer.from(await fileRes.arrayBuffer());
-    const rawPath = path.join('temp', `raw${i}.mp4`);
-    fs.writeFileSync(rawPath, buffer);
-
-    const trimmedPath = path.join('temp', `clip${i}.mp4`);
-    execSync(
-      `ffmpeg -y -i ${rawPath} -t ${CLIP_DURATION} ` +
-      `-vf "scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=decrease,pad=${OUT_W}:${OUT_H}:(ow-iw)/2:(oh-ih)/2,fps=30" ` +
-      `-an -c:v libx264 -preset fast -pix_fmt yuv420p ${trimmedPath}`,
-      { stdio: 'inherit' }
-    );
-    trimmedFiles.push(trimmedPath);
-  }
+  const trimmedFiles = await Promise.all(
+    clipUrls.map((url, i) => downloadAndTrim(url, i))
+  );
 
   const listContent = trimmedFiles.map(f => `file '${path.resolve(f)}'`).join('\n');
   fs.writeFileSync('temp/list.txt', listContent);
