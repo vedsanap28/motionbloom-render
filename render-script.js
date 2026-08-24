@@ -11,6 +11,7 @@ const RESOLUTIONS = {
   '1:1': { w: 720, h: 720 }
 };
 const { w: OUT_W, h: OUT_H } = RESOLUTIONS[aspect] || RESOLUTIONS['16:9'];
+const orientation = aspect === '9:16' ? 'portrait' : aspect === '1:1' ? 'square' : 'landscape';
 
 const duration = promptData.duration || '30s';
 const theme = promptData.theme || '';
@@ -62,9 +63,10 @@ function pickMusicFile(mood) {
   return moodFiles[Math.floor(Math.random() * moodFiles.length)];
 }
 
-async function fetchFromPexels(query, count) {
+async function fetchFromPexels(query, count, orient) {
+  const orientParam = orient ? `&orientation=${orient}` : '';
   const res = await fetch(
-    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count}`,
+    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count}${orientParam}`,
     { headers: { Authorization: PEXELS_KEY } }
   );
   if (!res.ok) return [];
@@ -87,7 +89,7 @@ async function fetchFromPixabay(query, count) {
 }
 
 async function main() {
-  console.log(`Job: ${jobId}, Query: ${searchQuery}, IsPerson: ${isPersonPrompt}, Duration: ${duration} (${NUM_CLIPS} clips)`);
+  console.log(`Job: ${jobId}, Query: ${searchQuery}, IsPerson: ${isPersonPrompt}, Duration: ${duration} (${NUM_CLIPS} clips), Aspect: ${aspect} (${orientation})`);
 
   if (isPersonPrompt) {
     throw new Error('PERSON_NOT_ALLOWED: Video generation featuring real people is not supported to protect individual privacy and identity. Please try a different prompt (nature, objects, animals, robots, anime, etc).');
@@ -99,8 +101,8 @@ async function main() {
   if (!fs.existsSync('output')) fs.mkdirSync('output');
   if (!fs.existsSync('temp')) fs.mkdirSync('temp');
 
-  console.log('Trying Pexels first...');
-  let clipUrls = await fetchFromPexels(searchQuery, NUM_CLIPS);
+  console.log(`Trying Pexels first (orientation: ${orientation})...`);
+  let clipUrls = await fetchFromPexels(searchQuery, NUM_CLIPS, orientation);
 
   if (clipUrls.length === 0 && PIXABAY_KEY) {
     console.log('Pexels had no results, trying Pixabay...');
