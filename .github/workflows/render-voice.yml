@@ -1,0 +1,39 @@
+name: Render Voice
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Unique job ID for this render'
+        required: true
+      prompt_data:
+        description: 'JSON data with text and voice'
+        required: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install edge-tts
+        run: pip install edge-tts
+
+      - name: Render voice
+        env:
+          JOB_ID: ${{ github.event.inputs.job_id }}
+          PROMPT_DATA: ${{ github.event.inputs.prompt_data }}
+        run: python render-voice.py "$JOB_ID" "$PROMPT_DATA"
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-${{ github.event.inputs.job_id }}
+          path: output/*.mp3
