@@ -1,0 +1,37 @@
+name: Render Writing
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Unique job ID for this render'
+        required: true
+      prompt_data:
+        description: 'JSON data with content type, tone, length, idea'
+        required: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Render writing
+        env:
+          JOB_ID: ${{ github.event.inputs.job_id }}
+          PROMPT_DATA: ${{ github.event.inputs.prompt_data }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node render-writing.js "$JOB_ID" "$PROMPT_DATA"
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: writing-${{ github.event.inputs.job_id }}
+          path: output/*.txt
