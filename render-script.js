@@ -18,6 +18,9 @@ const theme = promptData.theme || '';
 const DURATION_SECONDS = { '15s': 15, '30s': 30, '60s': 60 };
 const CLIP_DURATION = 5;
 const NUM_CLIPS = Math.ceil((DURATION_SECONDS[duration] || 30) / CLIP_DURATION);
+// Fetch extra candidates so we still have enough clips left after filtering out
+// any that look like they contain people.
+const FETCH_MULTIPLIER = 3;
 
 let searchQuery = promptData.query || 'nature';
 searchQuery = searchQuery.split('\n')[0].split('.')[0].trim();
@@ -29,8 +32,30 @@ if (theme) {
 const PEXELS_KEY = process.env.PEXELS_API_KEY;
 const PIXABAY_KEY = process.env.PIXABAY_API_KEY;
 
-const PERSON_KEYWORDS = ['boy', 'girl', 'man', 'woman', 'person', 'people', 'child', 'kid', 'guy', 'lady', 'human', 'men', 'women'];
-const isPersonPrompt = PERSON_KEYWORDS.some(word => searchQuery.toLowerCase().includes(word));
+const PERSON_KEYWORDS = [
+  'boy', 'boys',
+  'girl', 'girls',
+  'man', 'men', 'mens',
+  'woman', 'women', 'womens',
+  'person', 'persons',
+  'people',
+  'child', 'children', 'kid', 'kids',
+  'guy', 'guys',
+  'lady', 'ladies',
+  'human', 'humans',
+  'model', 'models',
+  'face', 'faces',
+  'family',
+  'baby', 'babies',
+  'crowd',
+];
+
+function containsPerson(text) {
+  const lower = (text || '').toLowerCase();
+  return PERSON_KEYWORDS.some((w) => new RegExp(`\\b${w}\\b`).test(lower));
+}
+
+const isPersonPrompt = containsPerson(searchQuery);
 
 const MOOD_MAP = {
   motivational: ['motivat', 'success', 'inspir', 'goal', 'achieve', 'winner'],
@@ -63,6 +88,12 @@ function pickMusicFile(mood) {
   return moodFiles[Math.floor(Math.random() * moodFiles.length)];
 }
 
+/**
+ * Fetch candidate clips from Pexels along with whatever descriptive text is
+ * available (the video's page URL contains a readable slug, e.g.
+ * ".../video/a-man-riding-a-bicycle-1234/") so we can screen out clips that
+ * look like they feature people before ever downloading them.
+ */
 async function fetchFromPexels(query, count, orient) {
   const orientParam = orient ? `&orientation=${orient}` : '';
   const res = await fetch(
@@ -74,10 +105,15 @@ async function fetchFromPexels(query, count, orient) {
   if (!data.videos) return [];
   return data.videos.map(v => {
     const vf = v.video_files.find(f => f.quality === 'sd') || v.video_files[0];
-    return vf.link;
+    return { url: vf.link, text: v.url || '' };
   });
 }
 
+/**
+ * Fetch candidate clips from Pixabay along with their real tag metadata,
+ * which is the most reliable signal we have for screening out clips that
+ * feature people.
+ */
 async function fetchFromPixabay(query, count) {
   const res = await fetch(
     `https://pixabay.com/api/videos/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&per_page=${count}`
@@ -85,7 +121,7 @@ async function fetchFromPixabay(query, count) {
   if (!res.ok) return [];
   const data = await res.json();
   if (!data.hits) return [];
-  return data.hits.map(h => h.videos.medium.url);
+  return data.hits.map(h => ({ url: h.videos.medium.url, text: h.tags || '' }));
 }
 
 async function downloadAndTrim(url, index) {
@@ -117,19 +153,38 @@ async function main() {
   if (!fs.existsSync('output')) fs.mkdirSync('output');
   if (!fs.existsSync('temp')) fs.mkdirSync('temp');
 
-  console.log(`Trying Pexels first (orientation: ${orientation})...`);
-  let clipUrls = await fetchFromPexels(searchQuery, NUM_CLIPS, orientation);
+  const wantCount = NUM_CLIPS * FETCH_MULTIPLIER;
 
-  if (clipUrls.length === 0 && PIXABAY_KEY) {
+  console.log(`Trying Pexels first (orientation: ${orientation})...`);
+  let candidates = await fetchFromPexels(searchQuery, wantCount, orientation);
+
+  if (candidates.length === 0 && PIXABAY_KEY) {
     console.log('Pexels had no results, trying Pixabay...');
-    clipUrls = await fetchFromPixabay(searchQuery, NUM_CLIPS);
+    candidates = await fetchFromPixabay(searchQuery, wantCount);
   }
 
-  if (clipUrls.length === 0) {
+  if (candidates.length === 0) {
     throw new Error('No clips found for this query.');
   }
 
-  console.log(`Found ${clipUrls.length} clips. Downloading in parallel...`);
+  // Screen out any candidate whose metadata/slug suggests it features a person.
+  let safeCandidates = candidates.filter(c => !containsPerson(c.text));
+  console.log(`Filtered ${candidates.length - safeCandidates.length} candidate(s) that looked like they contained people.`);
+
+  // If filtering left us short, try Pixabay as a second source before giving up.
+  if (safeCandidates.length < NUM_CLIPS && PIXABAY_KEY) {
+    console.log('Not enough safe clips from the first source, trying Pixabay for more...');
+    const extra = await fetchFromPixabay(searchQuery, wantCount);
+    const extraSafe = extra.filter(c => !containsPerson(c.text));
+    safeCandidates = safeCandidates.concat(extraSafe);
+  }
+
+  if (safeCandidates.length === 0) {
+    throw new Error('No people-free clips found for this query. Please try a different prompt.');
+  }
+
+  const clipUrls = safeCandidates.slice(0, NUM_CLIPS).map(c => c.url);
+  console.log(`Using ${clipUrls.length} people-free clip(s). Downloading in parallel...`);
 
   const trimmedFiles = await Promise.all(
     clipUrls.map((url, i) => downloadAndTrim(url, i))
@@ -155,3 +210,4 @@ main().catch(err => {
   console.error('ERROR:', err.message);
   process.exit(1);
 });
+
