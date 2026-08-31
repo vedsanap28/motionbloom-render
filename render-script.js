@@ -96,8 +96,11 @@ function pickMusicFile(mood) {
  */
 async function fetchFromPexels(query, count, orient) {
   const orientParam = orient ? `&orientation=${orient}` : '';
+  // Randomize which page of results we ask for, so the same/similar prompt
+  // doesn't always return the exact same top clips every time.
+  const page = 1 + Math.floor(Math.random() * 5);
   const res = await fetch(
-    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count}${orientParam}`,
+    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count}&page=${page}${orientParam}`,
     { headers: { Authorization: PEXELS_KEY } }
   );
   if (!res.ok) return [];
@@ -115,8 +118,9 @@ async function fetchFromPexels(query, count, orient) {
  * feature people.
  */
 async function fetchFromPixabay(query, count) {
+  const page = 1 + Math.floor(Math.random() * 5);
   const res = await fetch(
-    `https://pixabay.com/api/videos/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&per_page=${count}`
+    `https://pixabay.com/api/videos/?key=${PIXABAY_KEY}&q=${encodeURIComponent(query)}&per_page=${count}&page=${page}`
   );
   if (!res.ok) return [];
   const data = await res.json();
@@ -138,6 +142,16 @@ async function downloadAndTrim(url, index) {
     { stdio: 'inherit' }
   );
   return trimmedPath;
+}
+
+/** Fisher-Yates shuffle so we don't always pick the same top results. */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 async function main() {
@@ -183,7 +197,7 @@ async function main() {
     throw new Error('No people-free clips found for this query. Please try a different prompt.');
   }
 
-  const clipUrls = safeCandidates.slice(0, NUM_CLIPS).map(c => c.url);
+  const clipUrls = shuffle(safeCandidates).slice(0, NUM_CLIPS).map(c => c.url);
   console.log(`Using ${clipUrls.length} people-free clip(s). Downloading in parallel...`);
 
   const trimmedFiles = await Promise.all(
@@ -210,4 +224,3 @@ main().catch(err => {
   console.error('ERROR:', err.message);
   process.exit(1);
 });
-
